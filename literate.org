@@ -31,12 +31,12 @@
 #+begin_src clojure :tangle src/sicmutils_org/sicmutils1.clj :mkdirp
   (ns sicmutils-org.sicmutils1
     (:require [sicmutils.env :as env]))
-(env/bootstrap-repl!)
+  (env/bootstrap-repl!)
   #+end_src
 
   #+RESULTS:
 
-** simple render examples
+** Simple render examples
 #+begin_src clojure :tangle src/sicmutils_org/sicmutils1.clj 
   (def render (comp ->infix simplify))
 
@@ -48,11 +48,11 @@
 #+end_src
 
 #+RESULTS:
-| class clojure.lang.Compiler$CompilerException |
-| class clojure.lang.Compiler$CompilerException |
-| class clojure.lang.Compiler$CompilerException |
+| #'sicmutils-org.sicmutils1/render |
+| (expt (sin (+ a 3)) 2)            |
+| "sin²(a + 3)"                     |
 
-** simple tex-render example
+** Simple tex-render example
 #+begin_src clojure :tangle src/sicmutils_org/sicmutils1.clj  
   (def render-tex (comp ->TeX simplify))
   (render-tex
@@ -63,7 +63,7 @@
 | #'sicmutils-org.sicmutils1/render-tex |
 | "3\\,{x}^{2}"                         |
 
-** Lagrangiana de um pêndulo
+** Double Pendulum Lagrangian
 #+begin_src clojure :tangle src/sicmutils_org/sicmutils1.clj
   (defn L-central-polar [m U]
     (fn [[_ [r] [rdot thetadot]]]
@@ -90,3 +90,147 @@
 \displaystyle{m\,
 {\left(r\left(t\right)\right)}^{2}\,{D}^{2}\theta\left(t\right) + 2\,m\,r\left(t\right)\,D\theta\left(t\right)\,Dr\left(t\right)}\end{bmatrix}
 
+#+begin_src clojure :tangle src/sicmutils_org/sicmutils1.clj
+  (def L-free-fall
+    (fn [[t q qdot]]
+      (- (* 1/2 'm (square qdot))
+         (* 'm 'g q))))
+  (def y (literal-function 'y))
+  (render (((Lagrange-equations L-free-fall) y) 't))
+#+end_src
+
+#+RESULTS:
+| #'sicmutils-org.sicmutils1/L-free-fall |
+| #'sicmutils-org.sicmutils1/y           |
+| "g m + m D²y(t)"                       |
+
+#+begin_src clojure
+  (->JavaScript (((Lagrange-equations L-free-fall) y) 't))
+#+end_src
+
+#+RESULTS:
+: function(D, g, m, t, y) {\n  var _0003 = Math.pow(D, 2);\n  var _0005 = _0003(y);\n  var _0006 = _0005(t);\n  return 1/2 * m * (_0006 + _0006) - m * g;\n}
+
+
+* Understanding the library
+We use [[https://cljdoc.org/d/sicmutils/sicmutils/0.18.0/doc/reference-manual][sicmutils's doc]] as a guide.
+
+#+begin_src clojure
+(kind 3.14)
+#+end_src
+
+#+RESULTS:
+: java.lang.Double
+
+#+begin_src clojure
+((kind-predicate 3.14) 1)
+#+end_src
+
+#+RESULTS:
+: false
+
+#+begin_src clojure
+((kind-predicate 3.14) 1.0)
+#+end_src
+
+#+RESULTS:
+: true
+
+#+begin_src clojure
+  ((fn [x] (- (one-like x) x)) [[1 2] [2 1]])
+  ((fn [x] (- (zero-like x) x)) [1 2])
+  ((fn [x] (- (zero-like x) x)) 3)
+#+end_src
+
+#+begin_src clojure
+(def M
+  (matrix-by-rows [1  2  3  4  5]
+                  [6  7  8  9 10]
+                  [11 12 13 14 15]))
+#+end_src
+
+#+RESULTS:
+: #'sicmutils-org.sicmutils1/M
+
+#+begin_src clojure
+  (map cos (nth M 1))
+#+end_src
+
+#+RESULTS:
+| 0.960170286650366 | 0.7539022543433046 | -0.14550003380861354 | -0.9111302618846769 | -0.8390715290764524 |
+
+#+begin_src clojure
+  ;; (rows M) => [n m]
+  ;; (count M) ;; => n
+  ;; (count (nth M 1)) ;; => m
+
+  (defn dim [matrix]
+    [(count matrix) (count (nth matrix 1))])
+#+end_src
+
+#+RESULTS:
+: #'sicmutils-org.sicmutils1/dim
+
+#+begin_src clojure
+(dim M)
+#+end_src
+
+#+RESULTS:
+| 3 | 5 |
+
+#+begin_src clojure
+  (defn matrix:elementwise [proc m]
+    (let [[rows columns] (dim m)]
+      (m:generate rows columns
+                  (fn [i j] (proc (get-in m [i j]))))))
+#+end_src
+
+#+RESULTS:
+: #'sicmutils-org.sicmutils1/matrix:elementwise
+
+
+#+begin_src clojure
+(matrix:elementwise cos M)
+#+end_src
+
+#+RESULTS:
+: #object[sicmutils.matrix.Matrix 0x7a52f3d4 "[[0.5403023058681398 -0.4161468365471424 -0.9899924966004454 -0.6536436208636119 0.28366218546322625] [0.960170286650366 0.7539022543433046 -0.14550003380861354 -0.9111302618846769 -0.8390715290764524] [0.004425697988050785 0.8438539587324921 0.9074467814501962 0.1367372182078336 -0.7596879128588213]]"]
+
+#+begin_src clojure
+(def N [['a11 'a12]['a21 'a22]])
+#+end_src
+
+#+RESULTS:
+: #'sicmutils-org.sicmutils1/N
+
+#+begin_src clojure
+(matrix:elementwise cos N)
+#+end_src
+
+#+RESULTS:
+: #object[sicmutils.matrix.Matrix 0x1107ae66 "[[(cos a11) (cos a12)] [(cos a21) (cos a22)]]"]
+
+#+begin_src clojure
+(matrix:elementwise D (matrix:elementwise cos N))
+#+end_src
+
+#+RESULTS:
+: class java.lang.IllegalArgumentException
+
+** Debugging and behaviour study
+#+begin_src clojure
+  (defn foo [x m]
+    (let [[i j] (dim m)]
+      [x m]))
+#+end_src
+
+#+RESULTS:
+: #'sicmutils-org.sicmutils1/foo
+
+#+begin_src clojure
+  (defn element-proc [proc m i j]
+    (proc (ref m i j)))
+#+end_src
+
+#+RESULTS:
+: #'sicmutils-org.sicmutils1/element-proc
